@@ -1,1 +1,59 @@
-#
+name: Stock App CI/CD Pipeline 
+
+on:
+  workflow_dispatch:
+
+env:
+  ACR_NAME: gbenehomelabacr
+  IMAGE_NAME: stock-app-homelab
+
+jobs:
+  build-test-push:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run unit tests
+        run: pytest -v
+
+        
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          # Create a repo secret named AZURE_CREDENTIALS with the JSON from `az ad sp create-for-rbac --sdk-auth`
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build and push Docker image to ACR
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          IMAGE_FULL_NAME=${ACR_NAME}.azurecr.io/${IMAGE_NAME}
+
+          echo "Logging in to ACR ${ACR_NAME}..."
+          az acr login --name ${ACR_NAME}
+
+          echo "Building image ${IMAGE_FULL_NAME}:${IMAGE_TAG}..."
+          docker build -t ${IMAGE_FULL_NAME}:${IMAGE_TAG} .
+
+          echo "Pushing image with commit tag..."
+          docker push ${IMAGE_FULL_NAME}:${IMAGE_TAG}
+
+          echo "Tagging and pushing 'latest'..."
+          docker tag ${IMAGE_FULL_NAME}:${IMAGE_TAG} ${IMAGE_FULL_NAME}:latest
+          docker push ${IMAGE_FULL_NAME}:latest
