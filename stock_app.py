@@ -13,7 +13,7 @@ def load_last_prices(path: str) -> Dict[str, float]:
         with open(path, "r") as f:
             return json.load(f)
     except Exception:
-        # If file is corrupted, start fresh
+        # If file is corrupted or unreadable, start fresh
         return {}
 
 
@@ -22,38 +22,32 @@ def save_last_prices(path: str, prices: Dict[str, float]) -> None:
         json.dump(prices, f)
 
 
-def get_current_prices(tickers: List[str]) -> Dict[str, float]:
-    data = yf.download(
-        tickers=tickers,
-        period="1d",
-        interval="1m",
-        progress=False,
-        threads=True,
-    )
-
-    # When multiple tickers, yfinance returns a multi-index column
-    prices: Dict[str, float] = {}
-
-    if len(tickers) == 1:
-        # Single ticker case
-        ticker = tickers[0]
+def get_current_price(ticker: str) -> float | None:
+    """
+    Fetch the latest close price for a single ticker.
+    Returns None if it can't get a price.
+    """
+    try:
+        t = yf.Ticker(ticker)
+        # Try intraday first
+        data = t.history(period="1d", interval="1m")
+        if data.empty:
+            # Fallback to daily
+            data = t.history(period="1d")
+        if data.empty:
+            return None
         last_row = data.tail(1)
-        if not last_row.empty:
-            prices[ticker] = float(last_row["Close"].iloc[0])
-        return prices
+        return float(last_row["Close"].iloc[0])
+    except Exception:
+        return None
 
-    # Multi-ticker case
-    if data.empty:
-        return prices
 
-    last_row = data.tail(1)
-    for ticker in tickers:
-        try:
-            prices[ticker] = float(last_row["Close"][ticker].iloc[0])
-        except Exception:
-            # If something goes wrong for one ticker, skip it
-            continue
-
+def get_current_prices(tickers: List[str]) -> Dict[str, float]:
+    prices: Dict[str, float] = {}
+    for t in tickers:
+        price = get_current_price(t)
+        if price is not None:
+            prices[t] = price
     return prices
 
 
@@ -79,11 +73,14 @@ def main() -> None:
             if not current_prices:
                 print("No prices fetched, will retry...")
             for ticker, current_price in current_prices.items():
+                # store with only 2 decimals
+                rounded_price = round(current_price, 2)
+
                 last_price = last_prices.get(ticker)
                 if last_price is None:
-                    print(f"[INIT] {ticker}: current price {current_price:.2f}")
+                    print(f"[INIT] {ticker}: current price {rounded_price:.2f}")
                 else:
-                    change = current_price - last_price
+                    change = rounded_price - last_price
                     change_pct = (change / last_price) * 100 if last_price != 0 else 0
 
                     if abs(change_pct) >= alert_percent:
@@ -91,16 +88,16 @@ def main() -> None:
                         print(
                             f"[ALERT] {ticker}: {direction} "
                             f"{change_pct:.2f}% | "
-                            f"was {last_price:.2f}, now {current_price:.2f}"
+                            f"was {last_price:.2f}, now {rounded_price:.2f}"
                         )
                     else:
                         print(
                             f"[INFO] {ticker}: change {change_pct:.2f}% | "
-                            f"last {last_price:.2f}, now {current_price:.2f}"
+                            f"last {last_price:.2f}, now {rounded_price:.2f}"
                         )
 
-                # update last price
-                last_prices[ticker] = current_price
+                # update last price (2 decimals)
+                last_prices[ticker] = rounded_price
 
             save_last_prices(state_file, last_prices)
 
