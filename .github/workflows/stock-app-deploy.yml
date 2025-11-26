@@ -70,7 +70,7 @@ jobs:
 
     env:
     # TEMP: hardcode for debugging
-      ACR_NAME: gbenehomelabacr
+      ACR_NAME: ${{ secrets.ACR_NAME }}
       IMAGE_NAME: stock-app-homelab
       IMAGE_TAG: ${{ github.sha }}
 
