@@ -69,7 +69,8 @@ jobs:
     needs: build-test
 
     env:
-      ACR_NAME: ${{ secrets.ACR_NAME }}
+    # TEMP: hardcode for debugging
+      ACR_NAME: gbenehomelabacr
       IMAGE_NAME: stock-app-homelab
       IMAGE_TAG: ${{ github.sha }}
 
