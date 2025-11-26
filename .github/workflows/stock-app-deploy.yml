@@ -1,14 +1,24 @@
 name: Stock App CI/CD Pipeline 
 
+
 on:
   workflow_dispatch:
 
 env:
-  ACR_NAME: gbenehomelabacr
+  # Azure auth (from your existing secrets)
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+  ROOT_PATH: ${{ github.workspace }}
+
+  # Image info (local-only tag for now)
   IMAGE_NAME: stock-app-homelab
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  build-test-push:
+  build-test:
     runs-on: ubuntu-latest
 
     permissions:
@@ -33,27 +43,52 @@ jobs:
       - name: Run unit tests
         run: pytest -v
 
-        
-      - name: Azure login
+      - name: Azure login (using ARM_* secrets)
         uses: azure/login@v2
         with:
-          # Create a repo secret named AZURE_CREDENTIALS with the JSON from `az ad sp create-for-rbac --sdk-auth`
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ env.ARM_CLIENT_ID }}
+          tenant-id: ${{ env.ARM_TENANT_ID }}
+          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+          client-secret: ${{ env.ARM_CLIENT_SECRET }}
 
-      - name: Build and push Docker image to ACR
+      - name: Build Docker image (no push yet)
         run: |
-          IMAGE_TAG=${{ github.sha }}
-          IMAGE_FULL_NAME=${ACR_NAME}.azurecr.io/${IMAGE_NAME}
+          echo "Building local image ${IMAGE_NAME}:${IMAGE_TAG}"
+          docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
 
-          echo "Logging in to ACR ${ACR_NAME}..."
-          az acr login --name ${ACR_NAME}
+      # --------------------------------------------------------------------
+      # ACR login + push (COMMENTED OUT FOR NOW)
+      #
+      # When you're ready, uncomment this and add ACR_NAME as a secret/env:
+      #
+      # - name: Login to ACR
+      #   env:
+      #     ACR_NAME: ${{ secrets.ACR_NAME }}
+      #   run: |
+      #     echo "Logging in to ACR ${ACR_NAME}..."
+      #     az acr login --name ${ACR_NAME}
+      #
+      # - name: Tag and push image to ACR
+      #   env:
+      #     ACR_NAME: ${{ secrets.ACR_NAME }}
+      #   run: |
+      #     IMAGE_FULL_NAME=${ACR_NAME}.azurecr.io/${IMAGE_NAME}
+      #     echo "Tagging image as ${IMAGE_FULL_NAME}:${IMAGE_TAG}"
+      #     docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_FULL_NAME}:${IMAGE_TAG}
+      #     docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_FULL_NAME}:latest
+      #
+      #     echo "Pushing images..."
+      #     docker push ${IMAGE_FULL_NAME}:${IMAGE_TAG}
+      #     docker push ${IMAGE_FULL_NAME}:latest
+      # --------------------------------------------------------------------
 
-          echo "Building image ${IMAGE_FULL_NAME}:${IMAGE_TAG}..."
-          docker build -t ${IMAGE_FULL_NAME}:${IMAGE_TAG} .
-
-          echo "Pushing image with commit tag..."
-          docker push ${IMAGE_FULL_NAME}:${IMAGE_TAG}
-
-          echo "Tagging and pushing 'latest'..."
-          docker tag ${IMAGE_FULL_NAME}:${IMAGE_TAG} ${IMAGE_FULL_NAME}:latest
-          docker push ${IMAGE_FULL_NAME}:latest
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Stock App CI Dry Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Azure login: ✅ attempted with ARM_* secrets" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: ✅ pytest -v" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker image build: ✅ ${IMAGE_NAME}:${IMAGE_TAG}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_ACR login/push steps are currently commented out in the workflow._" >> $GITHUB_STEP_SUMMARY

@@ -1,2 +1,5 @@
+# Requirements for the stock app
 yfinance
 pytest
+fastapi
+uvicorn

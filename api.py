@@ -18,11 +18,24 @@ def get_tickers_from_env() -> List[str]:
 @app.get("/prices")
 def read_prices():
     tickers = get_tickers_from_env()
-    return {
-        "tickers": tickers,
-        "prices": get_current_prices(tickers),
-    }
+    raw_prices = get_current_prices(tickers)
 
+    stocks = []
+    for t in tickers:
+        price = raw_prices.get(t)
+        if price is not None:
+            stocks.append(
+                {
+                    "ticker": t,
+                    # price as string with exactly 2 decimals
+                    "price": f"{round(price, 2):.2f}",
+                }
+            )
+
+    return {
+        "count": len(stocks),
+        "stocks": stocks,
+    }
 
 @app.get("/healthz")
 def health():
