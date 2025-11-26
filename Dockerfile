@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY stock_app.py api.py .
+COPY stock_app.py api.py ./
 
 # Default envs (can be overridden at runtime)
 ENV TICKERS="MSFT,NVDA,GOOGL,META,AMZN,APPL,ADBE,AVGO,AMD,ASML,C,JPM,TSLA,NIO,ARE,RIO,UPS"
